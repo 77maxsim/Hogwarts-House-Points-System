@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    background-color: #0a0803;
+  }
+
+  body {
+    @apply bg-candlelit min-h-screen text-ink font-body;
+    background-attachment: fixed;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #120d04;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #3d2e18;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #c9a84c;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply bg-surface-raised border border-parchment-border rounded-lg shadow-panel;
+  }
+
+  .panel-overlay {
+    @apply bg-surface-overlay border border-parchment-border rounded-lg shadow-panel;
+  }
+
+  .gold-divider {
+    @apply border-t border-parchment-gold/20;
+  }
+
+  .btn-gold {
+    @apply bg-parchment-gold text-parchment font-body font-semibold px-6 py-2.5 rounded
+           hover:bg-parchment-gold-bright transition-colors duration-200
+           disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+
+  .btn-ghost {
+    @apply border border-parchment-border text-ink-muted font-body px-4 py-2 rounded
+           hover:border-parchment-gold/50 hover:text-ink transition-colors duration-200;
+  }
+
+  .label-field {
+    @apply block text-xs font-body font-medium text-ink-muted uppercase tracking-widest mb-1.5;
+  }
+
+  .input-field {
+    @apply w-full bg-surface border border-parchment-border rounded px-3 py-2.5
+           text-ink font-body text-sm
+           focus:outline-none focus:border-parchment-gold/60 focus:ring-1 focus:ring-parchment-gold/30
+           placeholder:text-ink-dim;
+  }
+
+  .select-field {
+    @apply input-field appearance-none cursor-pointer;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium;
+  }
+}
