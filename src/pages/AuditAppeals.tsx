@@ -13,8 +13,43 @@ import type {
 import type { HouseSlug } from '../types/db'
 
 const GRYFFINDOR_ID = '11111111-1111-1111-1111-111111111111'
+const SCHOOL_YEAR_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
 
 // ─── Data hooks ───────────────────────────────────────────────────────────────
+
+function useStudentTransactions(studentId: string) {
+  return useQuery({
+    queryKey: ['student_transactions', studentId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('point_transactions')
+        .select('id, school_year_id, transaction_type, house_id, student_id, points, reason, submitted_by, submitted_role_id, submitted_at, effective_at, source, original_transaction_id, metadata')
+        .eq('student_id', studentId)
+        .eq('school_year_id', SCHOOL_YEAR_ID)
+        .order('submitted_at', { ascending: false })
+      if (error) throw error
+      return (data ?? []) as PointTransaction[]
+    },
+    enabled: !!studentId,
+    refetchInterval: 10_000,
+  })
+}
+
+function useStudentAppeals(studentId: string) {
+  return useQuery({
+    queryKey: ['student_appeals', studentId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('appeals')
+        .select('*')
+        .eq('student_id', studentId)
+      if (error) throw error
+      return (data ?? []) as Appeal[]
+    },
+    enabled: !!studentId,
+    refetchInterval: 10_000,
+  })
+}
 
 function useAuditLog() {
   return useQuery({
@@ -95,7 +130,7 @@ interface LedgerEntryProps {
   houseSlug?: string
   submitterName?: string
   studentName?: string
-  appealButton?: { label: string; onClick: () => void } | 'appealed' | null
+  appealButton?: { label: string; onClick: () => void } | 'appealed' | 'pending' | 'approved' | 'rejected' | null
 }
 
 function LedgerEntryHover({ tx, houseName, houseSlug, submitterName, studentName, appealButton }: LedgerEntryProps) {
@@ -142,8 +177,12 @@ function LedgerEntryHover({ tx, houseName, houseSlug, submitterName, studentName
         </span>
         {appealButton && tx.transaction_type === 'deduction' && (
           <div className="mt-1" style={{ minHeight: '18px' }}>
-            {appealButton === 'appealed' ? (
-              <span className="text-xs font-mono" style={{ color: '#6b5b3e' }}>Appealed</span>
+            {typeof appealButton === 'string' ? (
+              <span className="text-xs font-mono" style={{ color: '#6b5b3e' }}>
+                {appealButton === 'approved' ? 'Approved ✓'
+                  : appealButton === 'rejected' ? 'Rejected'
+                  : 'Appealed'}
+              </span>
             ) : (
               <button
                 onClick={appealButton.onClick}
@@ -329,21 +368,22 @@ function ProfessorRestrictedView() {
 // ─── Student view ─────────────────────────────────────────────────────────────
 
 interface StudentViewProps {
-  auditLog: PointTransaction[]
-  appeals: Appeal[]
   houseMap: Record<string, House>
   userMap: Record<string, User>
   studentId: string
   studentName: string
   onAppeal: (txId: string, studentId: string) => void
-  appealedTxIds: Set<string>
   onContinueDemo: () => void
 }
 
-function StudentView({ auditLog, appeals, houseMap, userMap, studentId, studentName, onAppeal, appealedTxIds, onContinueDemo }: StudentViewProps) {
-  const myTransactions = auditLog.filter(tx => tx.student_id === studentId)
-  const myPendingAppeals = appeals.filter(a => a.student_id === studentId && a.status === 'pending')
-  const hasAppealPending = myPendingAppeals.length > 0
+function StudentView({ houseMap, userMap, studentId, studentName, onAppeal, onContinueDemo }: StudentViewProps) {
+  const transactions = useStudentTransactions(studentId)
+  const studentAppeals = useStudentAppeals(studentId)
+
+  const myTransactions = transactions.data ?? []
+  const myAppeals = studentAppeals.data ?? []
+  const appealStatusMap = new Map(myAppeals.map(a => [a.transaction_id, a.status]))
+  const hasAppealPending = myAppeals.some(a => a.status === 'pending')
 
   return (
     <div className="space-y-4">
@@ -352,13 +392,19 @@ function StudentView({ auditLog, appeals, houseMap, userMap, studentId, studentN
         count={myTransactions.length}
         tag="Immutable"
       >
-        {myTransactions.length === 0 ? (
+        {transactions.isLoading ? (
+          <div className="space-y-3 py-3">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="h-16 rounded-lg animate-pulse" style={{ background: 'rgba(30,21,9,0.6)' }} />
+            ))}
+          </div>
+        ) : myTransactions.length === 0 ? (
           <p className="text-ink-dim text-sm font-body text-center py-8">No transactions recorded for your account yet.</p>
         ) : (
           myTransactions.map(tx => {
             const house = houseMap[tx.house_id]
             const submitter = userMap[tx.submitted_by]
-            const alreadyAppealed = appealedTxIds.has(tx.id)
+            const appealStatus = appealStatusMap.get(tx.id)
             return (
               <LedgerEntryHover
                 key={tx.id}
@@ -368,10 +414,8 @@ function StudentView({ auditLog, appeals, houseMap, userMap, studentId, studentN
                 submitterName={submitter?.full_name}
                 studentName={studentName}
                 appealButton={
-                  tx.transaction_type === 'deduction' && tx.student_id
-                    ? alreadyAppealed
-                      ? 'appealed'
-                      : { label: 'Appeal →', onClick: () => onAppeal(tx.id, tx.student_id!) }
+                  tx.transaction_type === 'deduction'
+                    ? appealStatus ?? { label: 'Appeal →', onClick: () => onAppeal(tx.id, studentId) }
                     : null
                 }
               />
@@ -600,8 +644,17 @@ export default function AuditAppeals() {
   }
 
   const handleCreateAppeal = async (txId: string, studentId: string, reason: string) => {
-    const { error } = await supabase.rpc('create_student_appeal', { transaction_id: txId, student_id: studentId, reason })
+    const { error } = await supabase.from('appeals').insert({
+      transaction_id: txId,
+      student_id: studentId,
+      reason,
+      status: 'pending' as const,
+      reviewed_by: null,
+      reviewer_note: null,
+    })
     if (error) throw error
+    await qc.invalidateQueries({ queryKey: ['student_appeals', studentId] })
+    await qc.invalidateQueries({ queryKey: ['student_transactions', studentId] })
     await qc.invalidateQueries({ queryKey: ['appeals'] })
     showToast('Appeal submitted successfully')
   }
@@ -681,14 +734,11 @@ export default function AuditAppeals() {
         <ProfessorRestrictedView />
       ) : identity.persona === 'student' ? (
         <StudentView
-          auditLog={auditLog.data ?? []}
-          appeals={appeals.data ?? []}
           houseMap={houseMap}
           userMap={userMap}
           studentId={identity.id}
           studentName={identity.name}
           onAppeal={(txId, studentId) => setAppealModal({ txId, studentId })}
-          appealedTxIds={appealedTxIds}
           onContinueDemo={() => setPersona('head')}
         />
       ) : (

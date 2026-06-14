@@ -14,7 +14,7 @@ export interface DemoIdentity {
 export const DEMO_IDENTITIES: Record<DemoPersona, DemoIdentity> = {
   professor: {
     persona: 'professor',
-    id: '00000000-0000-0000-0000-000000000201',
+    id: 'eec824d2-dd42-47fd-bbd5-1625242bf0f6',
     name: 'Prof. E. Mallory',
     role: 'Professor',
     house: null,
@@ -22,7 +22,7 @@ export const DEMO_IDENTITIES: Record<DemoPersona, DemoIdentity> = {
   },
   student: {
     persona: 'student',
-    id: '00000000-0000-0000-0000-000000000205',
+    id: 'da2f94da-952b-45d8-aebb-70948f77660a',
     name: 'M. Aldridge',
     role: 'Student',
     house: 'Gryffindor',
@@ -30,7 +30,7 @@ export const DEMO_IDENTITIES: Record<DemoPersona, DemoIdentity> = {
   },
   head: {
     persona: 'head',
-    id: '00000000-0000-0000-0000-000000000206',
+    id: 'c81435ae-9ee1-410c-9505-92cc0b0cfd07',
     name: 'Head V. Wren',
     role: 'Head of House',
     house: 'Gryffindor',
