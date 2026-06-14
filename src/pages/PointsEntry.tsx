@@ -6,6 +6,8 @@ import { supabase } from '../lib/supabase'
 import DemoSwitcher from '../components/DemoSwitcher'
 import { useDemoIdentity } from '../contexts/DemoIdentity'
 import type { House, RoleLimit, UserRole } from '../types/db'
+import { getHouseTheme } from '../lib/houseTheme'
+import type { HouseSlug } from '../types/db'
 
 const SCHOOL_YEAR_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
 
@@ -38,10 +40,7 @@ function useUserRoles(userId: string) {
     queryKey: ['user_roles', userId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('user_roles')
-        .select('*')
-        .eq('user_id', userId)
-        .is('removed_at', null)
+        .from('user_roles').select('*').eq('user_id', userId).is('removed_at', null)
       if (error) throw error
       return (data ?? []) as UserRole[]
     },
@@ -49,33 +48,17 @@ function useUserRoles(userId: string) {
   })
 }
 
-// Returns the set of user IDs that currently hold an active Student role
 function useStudentUserIds() {
   return useQuery<Set<string>>({
     queryKey: ['student_user_ids'],
     queryFn: async () => {
-      const { data: roleRows, error: roleErr } = await supabase
-        .from('roles')
-        .select('id')
-        .ilike('name', 'student')
-      if (roleErr) {
-        console.error('[useStudentUserIds] roles query failed:', roleErr)
-        throw roleErr
-      }
-      if (!roleRows?.length) {
-        console.warn('[useStudentUserIds] No Student role found in roles table')
-        return new Set<string>()
-      }
+      const { data: roleRows, error: roleErr } = await supabase.from('roles').select('id').ilike('name', 'student')
+      if (roleErr) throw roleErr
+      if (!roleRows?.length) return new Set<string>()
       const roleIds = (roleRows as { id: string }[]).map(r => r.id)
       const { data: urRows, error: urErr } = await supabase
-        .from('user_roles')
-        .select('user_id')
-        .in('role_id', roleIds)
-        .is('removed_at', null)
-      if (urErr) {
-        console.error('[useStudentUserIds] user_roles query failed:', urErr)
-        throw urErr
-      }
+        .from('user_roles').select('user_id').in('role_id', roleIds).is('removed_at', null)
+      if (urErr) throw urErr
       return new Set((urRows ?? []).map((r: { user_id: string }) => r.user_id))
     },
   })
@@ -102,25 +85,157 @@ interface SuccessData {
   points: number
 }
 
-const HOUSE_COLORS: Record<string, string> = {
-  gryffindor: '#ef4444',
-  slytherin: '#4ade80',
-  ravenclaw: '#60a5fa',
-  hufflepuff: '#fcd34d',
+// ─── Role Limit Panel ─────────────────────────────────────────────────────────
+
+interface RoleLimitPanelProps {
+  actorRoleLimits: RoleLimit[]
+  roleId: string
+  onSelectRole: (id: string) => void
+  staffName: string
 }
 
-// ─── Student-blocked view ────────────────────────────────────────────────────
+function RoleLimitPanel({ actorRoleLimits, roleId, onSelectRole, staffName }: RoleLimitPanelProps) {
+  const ROLE_ICONS: Record<string, string> = {
+    prefect:     'P',
+    professor:   'Pr',
+    head:        'HH',
+    headmistress:'HM',
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Staff identity */}
+      <div
+        className="rounded-xl p-4"
+        style={{ background: 'rgba(10,8,3,0.5)', border: '1px solid rgba(61,46,24,0.4)' }}
+      >
+        <p className="section-label mb-2">Acting Identity</p>
+        <div className="flex items-center gap-3">
+          <div
+            className="w-10 h-10 rounded-full flex items-center justify-center font-display text-lg font-semibold shrink-0"
+            style={{
+              background: 'rgba(201,168,76,0.12)',
+              border: '1px solid rgba(201,168,76,0.30)',
+              color: '#c9a84c',
+            }}
+          >
+            {staffName.charAt(0)}
+          </div>
+          <div>
+            <p className="font-body font-medium text-sm text-ink leading-none">{staffName}</p>
+            <p className="text-xs font-mono mt-1" style={{ color: '#4a3c28' }}>Prototype · no real auth</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Role selection */}
+      <div>
+        <p className="section-label mb-2">Permission Context</p>
+        <div className="space-y-2">
+          {actorRoleLimits.map(r => {
+            const isActive = roleId === r.id
+            const iconKey = Object.keys(ROLE_ICONS).find(k => r.name.toLowerCase().includes(k)) ?? 'professor'
+            return (
+              <button
+                key={r.id}
+                onClick={() => onSelectRole(r.id)}
+                className="role-pill"
+                style={isActive ? {
+                  borderColor: 'rgba(201,168,76,0.55)',
+                  background: 'rgba(201,168,76,0.10)',
+                  boxShadow: '0 0 12px rgba(201,168,76,0.15)',
+                } : undefined}
+              >
+                <div
+                  className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-xs font-mono font-semibold"
+                  style={{
+                    background: isActive ? 'rgba(201,168,76,0.20)' : 'rgba(30,21,9,0.8)',
+                    border: `1px solid ${isActive ? 'rgba(201,168,76,0.45)' : 'rgba(61,46,24,0.5)'}`,
+                    color: isActive ? '#c9a84c' : '#6b5b3e',
+                  }}
+                >
+                  {ROLE_ICONS[iconKey] ?? r.display_name.charAt(0)}
+                </div>
+                <div className="flex-1 min-w-0 text-left">
+                  <p className={`font-body text-sm font-medium ${isActive ? 'text-ink' : 'text-ink-dim'} leading-none`}>
+                    {r.display_name}
+                  </p>
+                  <p className="text-xs font-mono mt-0.5" style={{ color: isActive ? '#c9a84c' : '#4a3c28' }}>
+                    {r.limit_label}
+                  </p>
+                </div>
+                {isActive && (
+                  <div
+                    className="w-1.5 h-1.5 rounded-full shrink-0"
+                    style={{ background: '#c9a84c' }}
+                  />
+                )}
+              </button>
+            )
+          })}
+
+          {actorRoleLimits.length === 0 && (
+            <div
+              className="rounded-lg p-3 text-center"
+              style={{ background: 'rgba(10,8,3,0.4)', border: '1px dashed rgba(61,46,24,0.4)' }}
+            >
+              <p className="text-xs font-mono text-ink-dim">No point-submission roles assigned</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Active limit display */}
+      {roleId && actorRoleLimits.find(r => r.id === roleId) && (() => {
+        const role = actorRoleLimits.find(r => r.id === roleId)!
+        return (
+          <div
+            className="rounded-xl p-4 mt-auto"
+            style={{
+              background: 'rgba(201,168,76,0.06)',
+              border: '1px solid rgba(201,168,76,0.25)',
+            }}
+          >
+            <p className="section-label mb-1">Transaction Limit</p>
+            <p className="font-mono text-3xl font-semibold" style={{ color: '#c9a84c' }}>
+              {role.point_limit !== null ? `±${role.point_limit}` : '∞'}
+            </p>
+            <p className="text-xs font-mono mt-0.5" style={{ color: '#6b5b3e' }}>
+              {role.point_limit !== null ? 'points per transaction' : 'unlimited authority'}
+            </p>
+          </div>
+        )
+      })()}
+    </div>
+  )
+}
+
+// ─── Student blocked view ─────────────────────────────────────────────────────
 
 function StudentBlockedView() {
   return (
-    <div className="panel rounded-xl p-10 text-center">
-      <p className="text-4xl mb-4">🎓</p>
-      <h2 className="font-display text-xl text-ink font-semibold mb-2">
+    <div
+      className="rounded-xl p-12 text-center"
+      style={{
+        background: 'rgba(20,14,5,0.7)',
+        border: '1px solid rgba(61,46,24,0.4)',
+      }}
+    >
+      <div
+        className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5"
+        style={{ background: 'rgba(201,168,76,0.08)', border: '1px solid rgba(201,168,76,0.20)' }}
+      >
+        <svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+          <path d="M14 3 L26 8 L26 18 Q26 24 14 27 Q2 24 2 18 L2 8 Z" fill="none" stroke="#c9a84c" strokeWidth="1.5" />
+          <text x="14" y="17" fontFamily="Georgia, serif" fontSize="11" fill="#c9a84c" textAnchor="middle" dominantBaseline="middle" fontWeight="700">S</text>
+        </svg>
+      </div>
+      <h2 className="font-display text-2xl text-ink font-semibold mb-2">
         Students don't submit point transactions
       </h2>
-      <p className="text-sm text-ink-dim font-body max-w-sm mx-auto">
-        Only staff members with an active role (Professor, Head of House, etc.) can award or deduct points.
-        Switch to a staff identity above to submit a transaction.
+      <p className="text-sm font-body max-w-sm mx-auto" style={{ color: '#6b5b3e' }}>
+        Only staff members with an active role (Professor, Head of House, etc.) can award or
+        deduct points. Switch to a staff identity above to submit a transaction.
       </p>
     </div>
   )
@@ -129,17 +244,16 @@ function StudentBlockedView() {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function PointsEntry() {
-  const navigate = useNavigate()
-  const qc = useQueryClient()
+  const navigate   = useNavigate()
+  const qc         = useQueryClient()
   const { identity, setPersona } = useDemoIdentity()
 
-  const houses = useHouses()
-  const roleLimits = useRoleLimits()
-  const userRoles = useUserRoles(identity.id)
-  const studentUserIds = useStudentUserIds()
-  const users = useUsers()
+  const houses           = useHouses()
+  const roleLimits       = useRoleLimits()
+  const userRoles        = useUserRoles(identity.id)
+  const studentUserIds   = useStudentUserIds()
+  const users            = useUsers()
 
-  // Role logic
   const [roleId, setRoleId] = useState('')
 
   const actorRoleIds = useMemo(
@@ -161,16 +275,15 @@ export default function PointsEntry() {
   }, [identity.id, userRoles.data, roleLimits.data])
 
   // Form state
-  const [houseId, setHouseId] = useState('')
-  const [studentId, setStudentId] = useState('')
-  const [pointsRaw, setPointsRaw] = useState('20')
-  const [reason, setReason] = useState('')
-  const [txType, setTxType] = useState<'award' | 'deduction'>('deduction')
+  const [houseId,     setHouseId]     = useState('')
+  const [studentId,   setStudentId]   = useState('')
+  const [pointsRaw,   setPointsRaw]   = useState('20')
+  const [reason,      setReason]      = useState('')
+  const [txType,      setTxType]      = useState<'award' | 'deduction'>('deduction')
   const [submitState, setSubmitState] = useState<SubmitState>('idle')
   const [successData, setSuccessData] = useState<SuccessData | null>(null)
-  const [errorMsg, setErrorMsg] = useState('')
+  const [errorMsg,    setErrorMsg]    = useState('')
 
-  // Reset form when identity changes
   useEffect(() => {
     setRoleId('')
     setHouseId('')
@@ -179,19 +292,20 @@ export default function PointsEntry() {
     setSuccessData(null)
   }, [identity.id])
 
-  // Derived
-  const selectedRole = actorRoleLimits.find(r => r.id === roleId)
-  const pointLimit = selectedRole?.point_limit ?? null
-  const pointsNum = parseInt(pointsRaw, 10)
-  const absPoints = Math.abs(isNaN(pointsNum) ? 0 : pointsNum)
+  const selectedRole  = actorRoleLimits.find(r => r.id === roleId)
+  const pointLimit    = selectedRole?.point_limit ?? null
+  const pointsNum     = parseInt(pointsRaw, 10)
+  const absPoints     = Math.abs(isNaN(pointsNum) ? 0 : pointsNum)
   const limitExceeded = pointLimit !== null && absPoints > pointLimit
 
   const selectedHouse = houses.data?.find(h => h.id === houseId)
-  const houseColor = selectedHouse ? HOUSE_COLORS[selectedHouse.slug] ?? '#c9a84c' : '#c9a84c'
+  const houseTheme    = selectedHouse ? getHouseTheme(selectedHouse.slug as HouseSlug) : null
 
   const houseStudents = (users.data ?? []).filter(
     u => u.house_id === houseId && (studentUserIds.data?.has(u.id) ?? false)
   )
+
+  const missingReason = !reason.trim() && submitState !== 'idle'
 
   const canSubmit =
     roleId && actorRoleIds.has(roleId) && houseId && reason.trim() &&
@@ -244,35 +358,73 @@ export default function PointsEntry() {
     setPointsRaw('20')
   }
 
+  const isStudent = identity.persona === 'student'
+
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
+    <div className="max-w-6xl mx-auto px-4 py-8">
+      {/* Page header */}
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
-        <p className="text-xs font-mono text-parchment-gold-dim uppercase tracking-[0.25em] mb-2">Staff Portal</p>
-        <h1 className="font-display text-4xl text-parchment-gold font-semibold">Points Entry</h1>
-        <div className="mt-3 h-px bg-gradient-to-r from-parchment-gold/40 via-parchment-gold/20 to-transparent" />
+        <p className="section-label mb-2">Staff Portal · Private Chamber</p>
+        <h1 className="font-display text-5xl text-parchment-gold font-semibold">Points Entry</h1>
+        <div className="mt-3 gold-line max-w-xs" />
       </motion.div>
 
       <DemoSwitcher />
 
-      {/* Student sees a blocked view */}
-      {identity.persona === 'student' ? (
+      {/* Student blocked */}
+      {isStudent ? (
         <StudentBlockedView />
       ) : (
         <AnimatePresence mode="wait">
           {submitState === 'success' && successData ? (
-            <motion.div key="success" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="space-y-4">
-              <div className="panel rounded-xl p-6 text-center" style={{ borderColor: 'rgba(74,222,128,0.3)', background: 'rgba(74,222,128,0.05)' }}>
-                <div className="text-5xl mb-4">✅</div>
-                <h2 className="font-display text-2xl text-ink font-semibold mb-1">Transaction Recorded</h2>
-                <p className="text-ink-muted text-sm font-body mb-4">Permanently added to the immutable audit log</p>
-                <div className="inline-flex items-center gap-3 bg-surface rounded-lg px-5 py-3">
-                  <span className="font-mono text-2xl font-semibold" style={{ color: successData.points < 0 ? '#f87171' : '#4ade80' }}>
+            // ── Success screen ─────────────────────────────────────────────────
+            <motion.div
+              key="success"
+              initial={{ opacity: 0, scale: 0.97 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0 }}
+              className="space-y-4"
+            >
+              <div
+                className="rounded-xl p-8 text-center"
+                style={{
+                  border: '1px solid rgba(74,222,128,0.30)',
+                  background: 'linear-gradient(135deg, rgba(74,222,128,0.06) 0%, rgba(20,14,5,0.9) 60%)',
+                  boxShadow: '0 0 40px rgba(74,222,128,0.08)',
+                }}
+              >
+                {/* Checkmark */}
+                <div className="flex items-center justify-center mb-5">
+                  <div
+                    className="w-16 h-16 rounded-full flex items-center justify-center"
+                    style={{ background: 'rgba(74,222,128,0.12)', border: '1px solid rgba(74,222,128,0.35)' }}
+                  >
+                    <svg width="30" height="30" viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M6 15 L12 21 L24 9" stroke="#4ade80" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                </div>
+
+                <h2 className="font-display text-3xl text-ink font-semibold mb-1">Transaction Sealed</h2>
+                <p className="font-mono text-sm mb-6" style={{ color: '#4a3c28' }}>
+                  Permanently recorded in the immutable audit ledger
+                </p>
+
+                {/* Transaction summary */}
+                <div
+                  className="inline-flex items-center gap-4 rounded-xl px-6 py-4 mb-4"
+                  style={{ background: 'rgba(10,8,3,0.7)', border: '1px solid rgba(61,46,24,0.45)' }}
+                >
+                  <span className="font-mono text-3xl font-semibold" style={{ color: successData.points < 0 ? '#f87171' : '#4ade80' }}>
                     {successData.points > 0 ? '+' : ''}{successData.points}
                   </span>
-                  <span className="text-ink-muted font-body text-sm">pts →</span>
-                  <span className="font-display text-lg text-ink">{successData.houseName}</span>
+                  <div className="w-px h-8" style={{ background: 'rgba(61,46,24,0.5)' }} />
+                  <span className="font-display text-xl text-ink">{successData.houseName}</span>
                 </div>
-                <p className="text-xs font-mono text-ink-dim mt-3">Transaction ID: {successData.transactionId.slice(-12).toUpperCase()}</p>
+
+                <p className="text-xs font-mono" style={{ color: '#4a3c28' }}>
+                  Transaction ID: {successData.transactionId.slice(-12).toUpperCase()}
+                </p>
               </div>
 
               <div className="flex gap-3">
@@ -286,194 +438,234 @@ export default function PointsEntry() {
               </div>
             </motion.div>
           ) : (
-            <motion.form key="form" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onSubmit={handleSubmit} className="space-y-6">
-              {/* Acting Identity */}
-              <div className="panel rounded-xl p-5">
-                <h2 className="font-display text-lg text-ink font-medium mb-4 flex items-center gap-2">
-                  <span className="text-parchment-gold text-base">①</span> Acting Identity
-                </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="label-field">Staff Member</label>
-                    <div className="input-field flex items-center" style={{ cursor: 'default', opacity: 0.85 }}>
-                      <span className="text-ink font-medium">{identity.name}</span>
+            // ── Form ──────────────────────────────────────────────────────────
+            <motion.form
+              key="form"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onSubmit={handleSubmit}
+            >
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* LEFT: Role panel */}
+                <div
+                  className="rounded-xl p-5"
+                  style={{
+                    background: 'rgba(20,14,5,0.75)',
+                    border: '1px solid rgba(61,46,24,0.45)',
+                  }}
+                >
+                  {userRoles.isLoading || roleLimits.isLoading ? (
+                    <div className="space-y-3">
+                      {[1,2,3].map(i => <div key={i} className="h-12 rounded-lg animate-pulse" style={{ background: 'rgba(30,21,9,0.8)' }} />)}
                     </div>
-                    <p className="text-xs text-ink-dim font-mono mt-1">Prototype — no real auth</p>
-                  </div>
-                  <div>
-                    {userRoles.isLoading || roleLimits.isLoading ? (
-                      <>
-                        <label className="label-field">Acting as</label>
-                        <div className="input-field animate-pulse text-ink-dim">Loading…</div>
-                      </>
-                    ) : actorRoleLimits.length === 1 ? (
-                      <>
-                        <label className="label-field">Acting as</label>
-                        <div className="input-field flex items-center justify-between select-none" style={{ opacity: 0.85, cursor: 'default' }}>
-                          <span className="text-ink font-medium">{actorRoleLimits[0].display_name}</span>
-                          <span className="text-xs font-mono text-parchment-gold">{actorRoleLimits[0].limit_label}</span>
-                        </div>
-                        <p className="text-xs text-ink-dim font-mono mt-1">Role assigned · single permission context</p>
-                      </>
-                    ) : actorRoleLimits.length > 1 ? (
-                      <>
-                        <label className="label-field">Acting as</label>
-                        <select className="select-field" value={roleId} onChange={e => setRoleId(e.target.value)} required>
-                          <option value="">— Choose permission context —</option>
-                          {actorRoleLimits.map(r => (
-                            <option key={r.id} value={r.id}>{r.display_name} ({r.limit_label})</option>
-                          ))}
-                        </select>
-                        <p className="text-xs text-ink-dim font-mono mt-1">Multiple roles — select which to act under</p>
-                      </>
-                    ) : (
-                      <>
-                        <label className="label-field">Acting as</label>
-                        <div className="input-field text-ink-dim text-sm select-none" style={{ cursor: 'default' }}>
-                          No point-submission roles assigned
-                        </div>
-                      </>
-                    )}
-                  </div>
+                  ) : (
+                    <RoleLimitPanel
+                      actorRoleLimits={actorRoleLimits}
+                      roleId={roleId}
+                      onSelectRole={setRoleId}
+                      staffName={identity.name}
+                    />
+                  )}
                 </div>
-                {selectedRole && (
-                  <div className="mt-3 inline-flex items-center gap-2 bg-surface rounded px-3 py-1.5">
-                    <span className="text-xs font-mono text-ink-dim">Limit per transaction:</span>
-                    <span className="text-sm font-mono text-parchment-gold font-medium">
-                      {pointLimit !== null ? `±${pointLimit} pts` : 'Unlimited'}
-                    </span>
-                  </div>
-                )}
-              </div>
 
-              {/* Target */}
-              <div className="panel rounded-xl p-5">
-                <h2 className="font-display text-lg text-ink font-medium mb-4 flex items-center gap-2">
-                  <span className="text-parchment-gold text-base">②</span> Target
-                </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="label-field">House</label>
-                    {houses.isLoading ? (
-                      <div className="input-field animate-pulse text-ink-dim">Loading houses…</div>
-                    ) : (
-                      <select
-                        className="select-field"
-                        value={houseId}
-                        onChange={e => { setHouseId(e.target.value); setStudentId('') }}
-                        required
-                        style={houseId ? { borderColor: `${houseColor}50`, color: houseColor } : {}}
-                      >
-                        <option value="">— Select house —</option>
-                        {houses.data?.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
-                      </select>
-                    )}
-                  </div>
-                  <div>
-                    <label className="label-field">Student (optional)</label>
-                    {studentUserIds.isError && import.meta.env.DEV && (
-                      <p className="text-xs text-red-400 font-mono mb-1">[dev] student role query failed — check console</p>
-                    )}
-                    <select
-                      className="select-field"
-                      value={studentId}
-                      onChange={e => setStudentId(e.target.value)}
-                      disabled={!houseId || studentUserIds.isLoading}
-                    >
-                      <option value="">— Select student —</option>
-                      {houseStudents.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
-                      {houseId && !studentUserIds.isLoading && !studentUserIds.isError && houseStudents.length === 0 && (
-                        <option disabled>No students found for this house</option>
-                      )}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Transaction */}
-              <div className="panel rounded-xl p-5">
-                <h2 className="font-display text-lg text-ink font-medium mb-4 flex items-center gap-2">
-                  <span className="text-parchment-gold text-base">③</span> Transaction
-                </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="label-field">Type</label>
-                    <div className="flex gap-2">
-                      {(['deduction', 'award'] as const).map(t => (
-                        <button
-                          key={t}
-                          type="button"
-                          onClick={() => setTxType(t)}
-                          className="flex-1 py-2.5 rounded font-body text-sm font-medium transition-colors"
-                          style={txType === t
-                            ? t === 'deduction'
-                              ? { background: 'rgba(248,113,113,0.15)', border: '1px solid rgba(248,113,113,0.4)', color: '#f87171' }
-                              : { background: 'rgba(74,222,128,0.15)', border: '1px solid rgba(74,222,128,0.4)', color: '#4ade80' }
-                            : { background: 'transparent', border: '1px solid rgba(61,46,24,0.6)', color: '#a89060' }
-                          }
+                {/* RIGHT: Transaction form */}
+                <div className="lg:col-span-2 space-y-5">
+                  {/* ① Target */}
+                  <div
+                    className="rounded-xl p-5"
+                    style={{ background: 'rgba(20,14,5,0.75)', border: '1px solid rgba(61,46,24,0.45)' }}
+                  >
+                    <h2 className="font-display text-lg text-ink font-medium mb-4 flex items-center gap-2">
+                      <span
+                        className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-mono font-semibold shrink-0"
+                        style={{ background: 'rgba(201,168,76,0.15)', color: '#c9a84c', border: '1px solid rgba(201,168,76,0.30)' }}
+                      >1</span>
+                      Target
+                    </h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="label-field">House {!houseId && <span className="text-red-400/70">*</span>}</label>
+                        {houses.isLoading ? (
+                          <div className="input-field animate-pulse text-ink-dim">Loading…</div>
+                        ) : (
+                          <select
+                            className="select-field"
+                            value={houseId}
+                            onChange={e => { setHouseId(e.target.value); setStudentId('') }}
+                            required
+                            style={houseId && houseTheme ? {
+                              borderColor: houseTheme.border,
+                              color: houseTheme.text,
+                            } : undefined}
+                          >
+                            <option value="">— Select house —</option>
+                            {houses.data?.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
+                          </select>
+                        )}
+                      </div>
+                      <div>
+                        <label className="label-field">Student (optional)</label>
+                        <select
+                          className="select-field"
+                          value={studentId}
+                          onChange={e => setStudentId(e.target.value)}
+                          disabled={!houseId || studentUserIds.isLoading}
                         >
-                          {t === 'deduction' ? '− Deduction' : '+ Award'}
-                        </button>
-                      ))}
+                          <option value="">— Select student —</option>
+                          {houseStudents.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+                          {houseId && !studentUserIds.isLoading && houseStudents.length === 0 && (
+                            <option disabled>No students found</option>
+                          )}
+                        </select>
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <label className="label-field">Points (absolute value)</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-lg font-semibold" style={{ color: txType === 'deduction' ? '#f87171' : '#4ade80' }}>
-                        {txType === 'deduction' ? '−' : '+'}
-                      </span>
-                      <input
-                        type="number"
-                        min={1}
-                        max={pointLimit ?? 500}
-                        value={Math.abs(parseInt(pointsRaw, 10) || 0)}
-                        onChange={e => setPointsRaw(e.target.value)}
-                        className="input-field pl-8 font-mono"
-                        placeholder="20"
+
+                  {/* ② Transaction */}
+                  <div
+                    className="rounded-xl p-5"
+                    style={{ background: 'rgba(20,14,5,0.75)', border: '1px solid rgba(61,46,24,0.45)' }}
+                  >
+                    <h2 className="font-display text-lg text-ink font-medium mb-4 flex items-center gap-2">
+                      <span
+                        className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-mono font-semibold shrink-0"
+                        style={{ background: 'rgba(201,168,76,0.15)', color: '#c9a84c', border: '1px solid rgba(201,168,76,0.30)' }}
+                      >2</span>
+                      Transaction
+                    </h2>
+
+                    {/* Type toggle + Points */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <label className="label-field">Type</label>
+                        <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid rgba(61,46,24,0.5)' }}>
+                          {(['deduction', 'award'] as const).map(t => {
+                            const isActive = txType === t
+                            return (
+                              <button
+                                key={t}
+                                type="button"
+                                onClick={() => setTxType(t)}
+                                className="flex-1 py-2.5 font-body text-sm font-semibold transition-all duration-150"
+                                style={isActive
+                                  ? t === 'deduction'
+                                    ? { background: 'rgba(248,113,113,0.15)', color: '#f87171', borderRight: t === 'deduction' ? '1px solid rgba(61,46,24,0.4)' : undefined }
+                                    : { background: 'rgba(74,222,128,0.15)', color: '#4ade80' }
+                                  : { background: 'transparent', color: '#4a3c28' }
+                                }
+                              >
+                                {t === 'deduction' ? '− Deduction' : '+ Award'}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="label-field">Points</label>
+                        <div className="relative">
+                          <span
+                            className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-lg font-semibold"
+                            style={{ color: txType === 'deduction' ? '#f87171' : '#4ade80' }}
+                          >
+                            {txType === 'deduction' ? '−' : '+'}
+                          </span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={pointLimit ?? 500}
+                            value={Math.abs(parseInt(pointsRaw, 10) || 0)}
+                            onChange={e => setPointsRaw(e.target.value)}
+                            className="input-field pl-8 font-mono"
+                            placeholder="20"
+                            required
+                          />
+                        </div>
+                        {limitExceeded && (
+                          <p className="text-xs font-mono mt-1.5" style={{ color: '#f87171' }}>
+                            ⚠ Exceeds role limit of {pointLimit} pts
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Reason */}
+                    <div className="mb-4">
+                      <label className="label-field">
+                        Reason <span className="text-red-400">*</span>
+                      </label>
+                      <textarea
+                        className="input-field resize-none"
+                        rows={3}
+                        placeholder="Describe the reason for this point transaction…"
+                        value={reason}
+                        onChange={e => setReason(e.target.value)}
                         required
+                        style={missingReason ? { borderColor: 'rgba(248,113,113,0.5)' } : undefined}
                       />
+                      <p className="text-xs font-mono mt-1" style={{ color: '#3d2e18' }}>
+                        Mandatory — permanently recorded in the audit ledger
+                      </p>
                     </div>
-                    {limitExceeded && (
-                      <p className="text-xs text-red-400 font-mono mt-1">⚠ Exceeds your role limit of {pointLimit} pts</p>
+
+                    {/* Preview */}
+                    <AnimatePresence>
+                      {houseId && absPoints > 0 && reason.trim() && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="rounded-lg overflow-hidden mb-4"
+                          style={{
+                            background: houseTheme ? houseTheme.bg : 'rgba(30,21,9,0.6)',
+                            border: houseTheme ? `1px solid ${houseTheme.border}` : '1px solid rgba(61,46,24,0.4)',
+                          }}
+                        >
+                          <div className="flex items-center gap-3 p-3">
+                            <span
+                              className="font-mono text-xl font-semibold"
+                              style={{ color: txType === 'deduction' ? '#f87171' : '#4ade80' }}
+                            >
+                              {txType === 'deduction' ? '−' : '+'}{absPoints}
+                            </span>
+                            <span style={{ color: '#3d2e18' }}>→</span>
+                            <span className="font-display text-base" style={{ color: houseTheme?.text ?? '#c9a84c' }}>
+                              {selectedHouse?.name}
+                            </span>
+                            <span className="text-xs font-body truncate flex-1 ml-1" style={{ color: '#4a3c28' }}>
+                              "{reason}"
+                            </span>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    {/* Error */}
+                    {submitState === 'error' && (
+                      <div
+                        className="rounded-lg p-3 mb-4"
+                        style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.30)' }}
+                      >
+                        <p className="text-sm font-mono" style={{ color: '#f87171' }}>Error: {errorMsg}</p>
+                      </div>
                     )}
+
+                    {/* Submit */}
+                    <div className="flex items-center justify-between gap-4">
+                      <p className="text-xs font-mono" style={{ color: '#3d2e18' }}>
+                        All submissions are permanent and audited
+                      </p>
+                      <button
+                        type="submit"
+                        disabled={!canSubmit}
+                        className="btn-seal"
+                      >
+                        {submitState === 'submitting' ? 'Sealing…' : 'Seal Transaction'}
+                      </button>
+                    </div>
                   </div>
                 </div>
-                <div className="mt-4">
-                  <label className="label-field">Reason <span className="text-red-400">*</span></label>
-                  <textarea
-                    className="input-field resize-none"
-                    rows={3}
-                    placeholder="Describe the reason for this point transaction…"
-                    value={reason}
-                    onChange={e => setReason(e.target.value)}
-                    required
-                  />
-                  <p className="text-xs text-ink-dim font-mono mt-1">Mandatory — permanently recorded in the audit log</p>
-                </div>
-                {houseId && absPoints > 0 && reason.trim() && (
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-4 rounded-lg bg-surface p-3 flex items-center gap-3">
-                    <span className="font-mono text-xl font-semibold" style={{ color: txType === 'deduction' ? '#f87171' : '#4ade80' }}>
-                      {txType === 'deduction' ? '−' : '+'}{absPoints}
-                    </span>
-                    <span className="text-ink-dim">→</span>
-                    <span className="font-display text-base" style={{ color: houseColor }}>{selectedHouse?.name}</span>
-                    <span className="text-ink-dim text-xs font-body flex-1 truncate ml-2">"{reason}"</span>
-                  </motion.div>
-                )}
-              </div>
-
-              {submitState === 'error' && (
-                <div className="rounded-lg p-3 bg-red-900/20 border border-red-500/30">
-                  <p className="text-sm text-red-400 font-mono">Error: {errorMsg}</p>
-                </div>
-              )}
-
-              <div className="flex items-center justify-between">
-                <p className="text-xs text-ink-dim font-mono">All submissions are permanent and audited</p>
-                <button type="submit" disabled={!canSubmit} className="btn-gold px-8 py-3 text-base">
-                  {submitState === 'submitting' ? 'Recording…' : 'Record Transaction'}
-                </button>
               </div>
             </motion.form>
           )}

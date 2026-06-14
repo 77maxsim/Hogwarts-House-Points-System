@@ -2,17 +2,17 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { AppealWithDetail } from '../types/db'
 
-const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  pending: { label: 'PENDING', color: '#fbbf24', bg: 'rgba(251,191,36,0.08)', border: 'rgba(251,191,36,0.3)' },
-  approved: { label: 'APPROVED', color: '#4ade80', bg: 'rgba(74,222,128,0.08)', border: 'rgba(74,222,128,0.3)' },
-  rejected: { label: 'REJECTED', color: '#f87171', bg: 'rgba(248,113,113,0.08)', border: 'rgba(248,113,113,0.3)' },
-}
+const STATUS_STYLES = {
+  pending:  { label: 'PENDING',  color: '#fbbf24', bg: 'rgba(251,191,36,0.08)',  border: 'rgba(251,191,36,0.30)' },
+  approved: { label: 'APPROVED', color: '#4ade80', bg: 'rgba(74,222,128,0.08)',  border: 'rgba(74,222,128,0.30)' },
+  rejected: { label: 'REJECTED', color: '#f87171', bg: 'rgba(248,113,113,0.08)', border: 'rgba(248,113,113,0.30)' },
+} as const
 
 interface AppealCardProps {
   appeal: AppealWithDetail
   onApprove?: (appealId: string, reviewerNote: string) => Promise<void>
-  onReject?: (appealId: string, reviewerNote: string) => Promise<void>
-  onEscalate?: (appealId: string) => Promise<void>
+  onReject?:  (appealId: string, reviewerNote: string) => Promise<void>
+  onEscalate?:(appealId: string) => Promise<void>
   reviewerName?: string
 }
 
@@ -40,11 +40,15 @@ export default function AppealCard({ appeal, onApprove, onReject, onEscalate, re
   }
 
   return (
-    <div className="panel rounded-xl overflow-hidden">
+    <div
+      className="rounded-xl overflow-hidden"
+      style={{ background: 'rgba(20,14,5,0.80)', border: `1px solid ${s.border}` }}
+    >
       {/* Header */}
       <button
         onClick={() => setExpanded(v => !v)}
-        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-surface-overlay/30 transition-colors"
+        className="w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors"
+        style={{ borderBottom: expanded ? `1px solid rgba(61,46,24,0.35)` : undefined }}
       >
         <span
           className="text-xs font-mono font-semibold px-2 py-0.5 rounded shrink-0"
@@ -54,14 +58,25 @@ export default function AppealCard({ appeal, onApprove, onReject, onEscalate, re
         </span>
         <div className="flex-1 min-w-0">
           <p className="text-sm text-ink font-body truncate">
-            <span className="text-ink-muted">Student:</span>{' '}
+            <span className="text-ink-muted">Student: </span>
             {appeal.student_name ?? appeal.student_id.slice(-8)}
           </p>
+          {appeal.transaction && (
+            <p className="text-xs font-mono mt-0.5 truncate" style={{ color: '#4a3c28' }}>
+              Re: {appeal.transaction.reason ?? 'Transaction ' + (appeal.transaction.id ?? '').slice(-8).toUpperCase()}
+            </p>
+          )}
         </div>
-        <span className="text-xs text-ink-dim font-mono shrink-0">
-          {new Date(appeal.created_at).toLocaleDateString()}
+        <span className="text-xs font-mono shrink-0" style={{ color: '#4a3c28' }}>
+          {new Date(appeal.created_at).toLocaleDateString('en-GB')}
         </span>
-        <span className="text-ink-dim ml-2">{expanded ? '▲' : '▼'}</span>
+        <svg
+          width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg"
+          className="shrink-0 transition-transform duration-200"
+          style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)', color: '#4a3c28' }}
+        >
+          <path d="M2 5 L7 9 L12 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </button>
 
       <AnimatePresence initial={false}>
@@ -70,61 +85,89 @@ export default function AppealCard({ appeal, onApprove, onReject, onEscalate, re
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.25 }}
+            transition={{ duration: 0.22 }}
             className="overflow-hidden"
           >
-            <div className="px-4 pb-4 border-t border-parchment-border/40">
-              {/* Transaction reference */}
-              {appeal.transaction && (
-                <div className="mt-3 mb-3 bg-surface rounded p-3">
-                  <p className="text-xs text-ink-dim font-mono mb-1">Referenced Transaction</p>
-                  <div className="flex items-center gap-3">
-                    <span className="font-mono text-sm text-red-400">
-                      {appeal.transaction.points}pts
-                    </span>
-                    <span className="text-xs text-ink-dim">—</span>
-                    <span className="text-xs text-ink font-body truncate">
-                      {appeal.transaction.reason ?? 'No reason provided'}
-                    </span>
-                  </div>
+            <div className="px-4 pb-4 pt-3 space-y-3">
+              {/* Appeal lifecycle */}
+              <div className="flex items-start gap-2">
+                {/* Lifecycle step dots */}
+                <div className="flex flex-col items-center gap-1 mt-1 shrink-0">
+                  <div className="w-2 h-2 rounded-full" style={{ background: '#f87171' }} />
+                  <div className="w-px flex-1 min-h-[20px]" style={{ background: 'rgba(61,46,24,0.5)' }} />
+                  <div className="w-2 h-2 rounded-full" style={{ background: '#fbbf24' }} />
+                  {(appeal.status !== 'pending') && (
+                    <>
+                      <div className="w-px flex-1 min-h-[20px]" style={{ background: 'rgba(61,46,24,0.5)' }} />
+                      <div className="w-2 h-2 rounded-full" style={{ background: appeal.status === 'approved' ? '#4ade80' : '#f87171' }} />
+                    </>
+                  )}
                 </div>
-              )}
 
-              {/* Student reason */}
-              <div className="mb-3">
-                <p className="text-xs text-ink-dim font-mono mb-1">Student's reason for appeal</p>
-                <p className="text-sm text-ink font-body bg-surface rounded p-3">{appeal.reason}</p>
+                <div className="flex-1 min-w-0 space-y-2">
+                  {/* Step 1: Original transaction */}
+                  {appeal.transaction && (
+                    <div
+                      className="rounded-lg p-3"
+                      style={{ background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.18)' }}
+                    >
+                      <p className="text-xs font-mono mb-1" style={{ color: '#8b3333' }}>Original Deduction</p>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm font-semibold" style={{ color: '#f87171' }}>
+                          {appeal.transaction.points}pts
+                        </span>
+                        <span className="text-xs font-body text-ink-muted truncate">
+                          {appeal.transaction.reason ?? 'No reason on record'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Step 2: Student's appeal */}
+                  <div
+                    className="rounded-lg p-3"
+                    style={{ background: 'rgba(251,191,36,0.05)', border: '1px solid rgba(251,191,36,0.18)' }}
+                  >
+                    <p className="text-xs font-mono mb-1" style={{ color: '#7a5e1a' }}>Student Appeal</p>
+                    <p className="text-sm font-body text-ink">{appeal.reason}</p>
+                  </div>
+
+                  {/* Step 3: Review decision */}
+                  {appeal.reviewer_note && (
+                    <div
+                      className="rounded-lg p-3"
+                      style={{
+                        background: appeal.status === 'approved' ? 'rgba(74,222,128,0.06)' : 'rgba(248,113,113,0.06)',
+                        border: `1px solid ${appeal.status === 'approved' ? 'rgba(74,222,128,0.20)' : 'rgba(248,113,113,0.20)'}`,
+                      }}
+                    >
+                      <p className="text-xs font-mono mb-1" style={{ color: appeal.status === 'approved' ? '#2d6e45' : '#8b3333' }}>
+                        Head of House Decision
+                        {appeal.reviewed_by_name && ` · ${appeal.reviewed_by_name}`}
+                      </p>
+                      <p className="text-sm font-body text-ink">{appeal.reviewer_note}</p>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Reviewer note (if resolved) */}
-              {appeal.reviewer_note && (
-                <div className="mb-3">
-                  <p className="text-xs text-ink-dim font-mono mb-1">
-                    Reviewer note {appeal.reviewed_by_name && `— ${appeal.reviewed_by_name}`}
-                  </p>
-                  <p className="text-sm text-ink font-body bg-surface rounded p-3">
-                    {appeal.reviewer_note}
-                  </p>
-                </div>
-              )}
-
-              {/* Action area — only for pending */}
+              {/* Action area — pending only */}
               {appeal.status === 'pending' && (onApprove || onReject || onEscalate) && (
-                <div className="mt-4 space-y-3">
+                <div className="pt-2 space-y-3" style={{ borderTop: '1px solid rgba(61,46,24,0.35)' }}>
                   {(onApprove || onReject) && (
                     <div>
-                      <label className="label-field">Reviewer note (required)</label>
+                      <label className="label-field">Reviewer note (required to decide)</label>
                       <textarea
                         className="input-field resize-none text-sm"
                         rows={2}
-                        placeholder="Add a note explaining the decision..."
+                        placeholder="Add a note explaining the decision…"
                         value={reviewerNote}
                         onChange={e => setReviewerNote(e.target.value)}
                       />
                     </div>
                   )}
                   {reviewerName && (
-                    <p className="text-xs text-ink-dim font-mono">
+                    <p className="text-xs font-mono" style={{ color: '#4a3c28' }}>
                       Acting as: <span className="text-parchment-gold">{reviewerName}</span>
                     </p>
                   )}
@@ -133,8 +176,8 @@ export default function AppealCard({ appeal, onApprove, onReject, onEscalate, re
                       <button
                         onClick={() => handle('approve')}
                         disabled={!reviewerNote.trim() || loading !== null}
-                        className="flex-1 py-2 rounded text-sm font-body font-semibold transition-colors disabled:opacity-40"
-                        style={{ background: 'rgba(74,222,128,0.15)', border: '1px solid rgba(74,222,128,0.35)', color: '#4ade80' }}
+                        className="flex-1 py-2.5 rounded-lg text-sm font-body font-semibold transition-all disabled:opacity-40"
+                        style={{ background: 'rgba(74,222,128,0.12)', border: '1px solid rgba(74,222,128,0.30)', color: '#4ade80' }}
                       >
                         {loading === 'approve' ? 'Approving…' : '✓ Approve & Restore Points'}
                       </button>
@@ -143,8 +186,8 @@ export default function AppealCard({ appeal, onApprove, onReject, onEscalate, re
                       <button
                         onClick={() => handle('reject')}
                         disabled={!reviewerNote.trim() || loading !== null}
-                        className="flex-1 py-2 rounded text-sm font-body font-semibold transition-colors disabled:opacity-40"
-                        style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', color: '#f87171' }}
+                        className="flex-1 py-2.5 rounded-lg text-sm font-body font-semibold transition-all disabled:opacity-40"
+                        style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.25)', color: '#f87171' }}
                       >
                         {loading === 'reject' ? 'Rejecting…' : '✗ Reject Appeal'}
                       </button>
@@ -153,8 +196,8 @@ export default function AppealCard({ appeal, onApprove, onReject, onEscalate, re
                       <button
                         onClick={handleEscalate}
                         disabled={loading !== null}
-                        className="flex-1 py-2 rounded text-sm font-body font-semibold transition-colors disabled:opacity-40"
-                        style={{ background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.3)', color: '#60a5fa' }}
+                        className="flex-1 py-2.5 rounded-lg text-sm font-body font-semibold transition-all disabled:opacity-40"
+                        style={{ background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.25)', color: '#93c5fd' }}
                       >
                         {loading === 'escalate' ? 'Escalating…' : '↑ Escalate to Headmistress'}
                       </button>

@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@300;400;500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -12,62 +14,242 @@
     background-attachment: fixed;
   }
 
-  /* Scrollbar styling */
-  ::-webkit-scrollbar {
-    width: 6px;
-  }
-  ::-webkit-scrollbar-track {
-    background: #120d04;
-  }
-  ::-webkit-scrollbar-thumb {
-    background: #3d2e18;
-    border-radius: 3px;
-  }
-  ::-webkit-scrollbar-thumb:hover {
-    background: #c9a84c;
-  }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: #120d04; }
+  ::-webkit-scrollbar-thumb { background: #3d2e18; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #c9a84c; }
 }
 
 @layer components {
+  /* ── Panels ─────────────────────────────────── */
   .panel {
-    @apply bg-surface-raised border border-parchment-border rounded-lg shadow-panel;
+    @apply bg-surface-raised border border-parchment-border rounded-xl shadow-panel;
   }
 
   .panel-overlay {
-    @apply bg-surface-overlay border border-parchment-border rounded-lg shadow-panel;
+    @apply bg-surface-overlay border border-parchment-border rounded-xl shadow-panel;
   }
 
+  .panel-glass {
+    background: rgba(30, 21, 9, 0.75);
+    border: 1px solid rgba(201, 168, 76, 0.18);
+    backdrop-filter: blur(12px);
+    border-radius: 0.75rem;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(201,168,76,0.12);
+  }
+
+  /* ── Dividers ───────────────────────────────── */
   .gold-divider {
     @apply border-t border-parchment-gold/20;
   }
 
+  .gold-line {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(201,168,76,0.5), transparent);
+  }
+
+  /* ── Buttons ────────────────────────────────── */
   .btn-gold {
-    @apply bg-parchment-gold text-parchment font-body font-semibold px-6 py-2.5 rounded
-           hover:bg-parchment-gold-bright transition-colors duration-200
+    @apply bg-parchment-gold text-parchment font-body font-semibold px-6 py-2.5 rounded-lg
+           hover:bg-parchment-gold-bright transition-all duration-200
            disabled:opacity-40 disabled:cursor-not-allowed;
+    box-shadow: 0 2px 12px rgba(201,168,76,0.25);
+  }
+
+  .btn-gold:hover:not(:disabled) {
+    box-shadow: 0 4px 20px rgba(201,168,76,0.40);
+    transform: translateY(-1px);
   }
 
   .btn-ghost {
-    @apply border border-parchment-border text-ink-muted font-body px-4 py-2 rounded
-           hover:border-parchment-gold/50 hover:text-ink transition-colors duration-200;
+    @apply border border-parchment-border text-ink-muted font-body px-4 py-2 rounded-lg
+           hover:border-parchment-gold/50 hover:text-ink transition-all duration-200;
   }
 
+  .btn-seal {
+    background: linear-gradient(135deg, #c9a84c 0%, #8a6e35 100%);
+    color: #0a0803;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-weight: 700;
+    font-size: 0.875rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0.75rem 2rem;
+    border-radius: 0.5rem;
+    border: 1px solid rgba(255,220,100,0.3);
+    transition: all 0.2s ease;
+    box-shadow: 0 0 20px rgba(201,168,76,0.30), 0 4px 12px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.15);
+    cursor: pointer;
+  }
+
+  .btn-seal:hover:not(:disabled) {
+    box-shadow: 0 0 32px rgba(201,168,76,0.50), 0 6px 16px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.20);
+    transform: translateY(-2px);
+  }
+
+  .btn-seal:disabled {
+    opacity: 0.40;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+
+  /* ── Form fields ────────────────────────────── */
   .label-field {
     @apply block text-xs font-body font-medium text-ink-muted uppercase tracking-widest mb-1.5;
   }
 
   .input-field {
-    @apply w-full bg-surface border border-parchment-border rounded px-3 py-2.5
+    @apply w-full bg-surface border border-parchment-border rounded-lg px-3 py-2.5
            text-ink font-body text-sm
            focus:outline-none focus:border-parchment-gold/60 focus:ring-1 focus:ring-parchment-gold/30
-           placeholder:text-ink-dim;
+           placeholder:text-ink-dim
+           transition-colors duration-150;
   }
 
   .select-field {
     @apply input-field appearance-none cursor-pointer;
   }
 
+  /* ── Badges ─────────────────────────────────── */
   .badge {
     @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium;
+  }
+
+  .badge-gold {
+    @apply badge;
+    background: rgba(201,168,76,0.15);
+    color: #c9a84c;
+    border: 1px solid rgba(201,168,76,0.30);
+  }
+
+  .badge-live {
+    background: rgba(74,222,128,0.10);
+    color: #4ade80;
+    border: 1px solid rgba(74,222,128,0.25);
+    border-radius: 0.375rem;
+    font-size: 0.65rem;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 500;
+    padding: 0.2rem 0.55rem;
+    letter-spacing: 0.08em;
+  }
+
+  .badge-live::before {
+    content: '';
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    background: #4ade80;
+    border-radius: 50%;
+    margin-right: 5px;
+    animation: pulse-live 2s infinite;
+  }
+
+  /* ── Section headers ─────────────────────────  */
+  .section-label {
+    font-size: 0.65rem;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    color: #8a6e35;
+  }
+
+  /* ── Immutable tag ───────────────────────────── */
+  .tag-immutable {
+    font-size: 0.6rem;
+    font-family: 'IBM Plex Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: #6b5b3e;
+    border: 1px solid rgba(61,46,24,0.50);
+    border-radius: 0.25rem;
+    padding: 0.15rem 0.45rem;
+  }
+
+  /* ── Ledger row ──────────────────────────────── */
+  .ledger-row {
+    @apply flex items-start gap-3 py-3 border-b border-parchment-border/25 last:border-0;
+    transition: background 0.15s;
+  }
+
+  .ledger-row:hover {
+    background: rgba(201,168,76,0.03);
+  }
+
+  /* ── Gold shimmer animation ──────────────────── */
+  @keyframes shimmer-gold {
+    0% { background-position: -200% center; }
+    100% { background-position: 200% center; }
+  }
+
+  @keyframes pulse-live {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.85); }
+  }
+
+  @keyframes candle-flicker {
+    0%, 100% { opacity: 1; }
+    25% { opacity: 0.92; }
+    50% { opacity: 0.97; }
+    75% { opacity: 0.88; }
+  }
+
+  @keyframes rise-in {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .animate-rise {
+    animation: rise-in 0.5s ease both;
+  }
+
+  .shimmer-text {
+    background: linear-gradient(90deg, #c9a84c 0%, #fde68a 40%, #c9a84c 60%, #8a6e35 100%);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: shimmer-gold 3s linear infinite;
+  }
+
+  /* ── Ticker ──────────────────────────────────── */
+  .ticker-track {
+    display: flex;
+    gap: 2.5rem;
+    white-space: nowrap;
+    animation: scroll-ticker 28s linear infinite;
+  }
+
+  @keyframes scroll-ticker {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+
+  /* ── Role panel ──────────────────────────────── */
+  .role-pill {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.5rem;
+    border: 1px solid rgba(61,46,24,0.50);
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.15s;
+    width: 100%;
+    text-align: left;
+  }
+
+  .role-pill:hover {
+    border-color: rgba(201,168,76,0.35);
+    background: rgba(201,168,76,0.05);
+  }
+
+  .role-pill.active {
+    border-color: rgba(201,168,76,0.55);
+    background: rgba(201,168,76,0.10);
+    box-shadow: 0 0 12px rgba(201,168,76,0.15);
   }
 }
