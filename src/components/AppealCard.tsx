@@ -19,6 +19,7 @@ interface AppealCardProps {
 export default function AppealCard({ appeal, onApprove, onReject, onEscalate, reviewerName }: AppealCardProps) {
   const [reviewerNote, setReviewerNote] = useState('')
   const [loading, setLoading] = useState<'approve' | 'reject' | 'escalate' | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(appeal.status === 'pending')
 
   const s = STATUS_STYLES[appeal.status] ?? STATUS_STYLES.pending
@@ -26,9 +27,12 @@ export default function AppealCard({ appeal, onApprove, onReject, onEscalate, re
   const handle = async (action: 'approve' | 'reject') => {
     if (!reviewerNote.trim()) return
     setLoading(action)
+    setError(null)
     try {
       if (action === 'approve') await onApprove?.(appeal.id, reviewerNote)
       else await onReject?.(appeal.id, reviewerNote)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Operation failed')
     } finally {
       setLoading(null)
     }
@@ -36,7 +40,10 @@ export default function AppealCard({ appeal, onApprove, onReject, onEscalate, re
 
   const handleEscalate = async () => {
     setLoading('escalate')
-    try { await onEscalate?.(appeal.id) } finally { setLoading(null) }
+    setError(null)
+    try { await onEscalate?.(appeal.id) } catch (e) {
+      setError(e instanceof Error ? e.message : 'Escalation failed')
+    } finally { setLoading(null) }
   }
 
   return (
@@ -203,6 +210,11 @@ export default function AppealCard({ appeal, onApprove, onReject, onEscalate, re
                       </button>
                     )}
                   </div>
+                  {error && (
+                    <p className="text-xs font-mono mt-1 px-1" style={{ color: '#f87171' }}>
+                      Error: {error}
+                    </p>
+                  )}
                 </div>
               )}
             </div>

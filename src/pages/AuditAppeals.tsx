@@ -660,22 +660,86 @@ export default function AuditAppeals() {
   }
 
   const handleApprove = async (appealId: string, reviewerNote: string) => {
-    const { error } = await supabase.rpc('approve_appeal_and_create_correction', {
-      appeal_id: appealId, reviewed_by: identity.id, reviewer_note: reviewerNote,
-    })
-    if (error) throw error
-    await qc.invalidateQueries({ queryKey: ['appeals'] })
-    await qc.invalidateQueries({ queryKey: ['audit_log'] })
-    await qc.invalidateQueries({ queryKey: ['standings'] })
-    await qc.invalidateQueries({ queryKey: ['banner'] })
-    await qc.invalidateQueries({ queryKey: ['movements'] })
+    // Locate the original transaction from the in-memory audit log
+    const appeal = enrichedAppeals.find(a => a.id === appealId)
+    const tx = appeal?.transaction
+    if (!tx?.id || !tx.school_year_id || !tx.house_id || tx.points === undefined) {
+      throw new Error('Original transaction not found — reload and try again')
+    }
+
+    // Find the correction-eligible role assigned to the current user
+    const { data: urRows, error: urErr } = await supabase
+      .from('user_roles').select('role_id').eq('user_id', identity.id).is('removed_at', null)
+    if (urErr) throw urErr
+    const userRoleIds = (urRows ?? []).map((r: { role_id: string }) => r.role_id)
+    if (!userRoleIds.length) throw new Error('No roles assigned to this account')
+
+    const { data: rlRows, error: rlErr } = await supabase
+      .from('role_limits_view').select('id').eq('can_submit_corrections', true).in('id', userRoleIds)
+    if (rlErr) throw rlErr
+    const headRoleId = (rlRows as { id: string }[] | null)?.[0]?.id
+    if (!headRoleId) throw new Error('No correction-eligible role assigned to this account')
+
+    // Insert correction transaction
+    const { data: corrTx, error: txErr } = await supabase
+      .from('point_transactions')
+      .insert({
+        school_year_id: tx.school_year_id,
+        transaction_type: 'correction',
+        house_id: tx.house_id,
+        student_id: tx.student_id ?? null,
+        points: Math.abs(tx.points as number),
+        reason: `Appeal approved: ${reviewerNote}`,
+        submitted_by: identity.id,
+        submitted_role_id: headRoleId,
+        original_transaction_id: tx.id,
+        submitted_at: new Date().toISOString(),
+        effective_at: new Date().toISOString(),
+        source: 'manual',
+        metadata: { appeal_id: appealId, demo_action: 'appeal_approved' },
+      })
+      .select('id')
+      .single()
+    if (txErr) throw txErr
+
+    // Update appeal status
+    const { error: appealErr } = await supabase
+      .from('appeals')
+      .update({
+        status: 'approved',
+        reviewed_by: identity.id,
+        reviewer_note: reviewerNote,
+        resolved_at: new Date().toISOString(),
+        correction_transaction_id: (corrTx as { id: string }).id,
+      })
+      .eq('id', appealId)
+    if (appealErr) throw appealErr
+
+    // Refresh all relevant caches
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ['appeals'] }),
+      qc.invalidateQueries({ queryKey: ['audit_log'] }),
+      qc.invalidateQueries({ queryKey: ['standings'] }),
+      qc.invalidateQueries({ queryKey: ['banner'] }),
+      qc.invalidateQueries({ queryKey: ['movements'] }),
+      ...(tx.student_id ? [
+        qc.invalidateQueries({ queryKey: ['student_transactions', tx.student_id] }),
+        qc.invalidateQueries({ queryKey: ['student_appeals', tx.student_id] }),
+      ] : []),
+    ])
     showToast('Appeal approved — correction transaction created')
   }
 
   const handleReject = async (appealId: string, reviewerNote: string) => {
-    const { error } = await supabase.rpc('reject_appeal', {
-      appeal_id: appealId, reviewed_by: identity.id, reviewer_note: reviewerNote,
-    })
+    const { error } = await supabase
+      .from('appeals')
+      .update({
+        status: 'rejected',
+        reviewed_by: identity.id,
+        reviewer_note: reviewerNote,
+        resolved_at: new Date().toISOString(),
+      })
+      .eq('id', appealId)
     if (error) throw error
     await qc.invalidateQueries({ queryKey: ['appeals'] })
     showToast('Appeal rejected')
