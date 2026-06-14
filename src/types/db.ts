@@ -117,17 +117,21 @@ export interface User {
 // Table: roles
 export interface Role {
   id: string
-  role_name: string
+  name: string
   point_limit: number | null
 }
 
-// Table: user_roles
+// Table: user_roles (actual DB columns)
 export interface UserRole {
   id: string
   user_id: string
   role_id: string
-  house_id: string | null
-  is_active: boolean
+  assigned_at: string
+  assigned_by: string | null
+  reason: string | null
+  removed_at: string | null
+  created_at: string
+  updated_at: string
 }
 
 // Table: houses (actual DB columns)
@@ -166,7 +170,7 @@ export interface Database {
       anti_abuse_flags: { Row: AntiAbuseFlag; Insert: Omit<AntiAbuseFlag, 'id' | 'created_at' | 'updated_at'>; Update: Partial<AntiAbuseFlag> }
       users: { Row: User; Insert: Omit<User, 'id' | 'created_at'>; Update: Partial<User> }
       roles: { Row: Role; Insert: Omit<Role, 'id'>; Update: Partial<Role> }
-      user_roles: { Row: UserRole; Insert: Omit<UserRole, 'id'>; Update: Partial<UserRole> }
+      user_roles: { Row: UserRole; Insert: Omit<UserRole, 'id' | 'created_at' | 'updated_at'>; Update: Partial<UserRole> }
       houses: { Row: House; Insert: Omit<House, 'id'>; Update: Partial<House> }
       anti_abuse_flag_transactions: { Row: { flag_id: string; transaction_id: string }; Insert: { flag_id: string; transaction_id: string }; Update: never }
       audit_events: { Row: { id: string; event_type: string; actor_id: string; target_id: string; metadata: Record<string, unknown>; created_at: string }; Insert: never; Update: never }

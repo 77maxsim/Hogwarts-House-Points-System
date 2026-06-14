@@ -12,12 +12,13 @@ interface AppealCardProps {
   appeal: AppealWithDetail
   onApprove?: (appealId: string, reviewerNote: string) => Promise<void>
   onReject?: (appealId: string, reviewerNote: string) => Promise<void>
+  onEscalate?: (appealId: string) => Promise<void>
   reviewerName?: string
 }
 
-export default function AppealCard({ appeal, onApprove, onReject, reviewerName }: AppealCardProps) {
+export default function AppealCard({ appeal, onApprove, onReject, onEscalate, reviewerName }: AppealCardProps) {
   const [reviewerNote, setReviewerNote] = useState('')
-  const [loading, setLoading] = useState<'approve' | 'reject' | null>(null)
+  const [loading, setLoading] = useState<'approve' | 'reject' | 'escalate' | null>(null)
   const [expanded, setExpanded] = useState(appeal.status === 'pending')
 
   const s = STATUS_STYLES[appeal.status] ?? STATUS_STYLES.pending
@@ -31,6 +32,11 @@ export default function AppealCard({ appeal, onApprove, onReject, reviewerName }
     } finally {
       setLoading(null)
     }
+  }
+
+  const handleEscalate = async () => {
+    setLoading('escalate')
+    try { await onEscalate?.(appeal.id) } finally { setLoading(null) }
   }
 
   return (
@@ -103,40 +109,56 @@ export default function AppealCard({ appeal, onApprove, onReject, reviewerName }
               )}
 
               {/* Action area — only for pending */}
-              {appeal.status === 'pending' && onApprove && onReject && (
+              {appeal.status === 'pending' && (onApprove || onReject || onEscalate) && (
                 <div className="mt-4 space-y-3">
-                  <div>
-                    <label className="label-field">Reviewer note (required)</label>
-                    <textarea
-                      className="input-field resize-none text-sm"
-                      rows={2}
-                      placeholder="Add a note explaining the decision..."
-                      value={reviewerNote}
-                      onChange={e => setReviewerNote(e.target.value)}
-                    />
-                  </div>
+                  {(onApprove || onReject) && (
+                    <div>
+                      <label className="label-field">Reviewer note (required)</label>
+                      <textarea
+                        className="input-field resize-none text-sm"
+                        rows={2}
+                        placeholder="Add a note explaining the decision..."
+                        value={reviewerNote}
+                        onChange={e => setReviewerNote(e.target.value)}
+                      />
+                    </div>
+                  )}
                   {reviewerName && (
                     <p className="text-xs text-ink-dim font-mono">
                       Acting as: <span className="text-parchment-gold">{reviewerName}</span>
                     </p>
                   )}
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handle('approve')}
-                      disabled={!reviewerNote.trim() || loading !== null}
-                      className="flex-1 py-2 rounded text-sm font-body font-semibold transition-colors disabled:opacity-40"
-                      style={{ background: 'rgba(74,222,128,0.15)', border: '1px solid rgba(74,222,128,0.35)', color: '#4ade80' }}
-                    >
-                      {loading === 'approve' ? 'Approving…' : '✓ Approve & Restore Points'}
-                    </button>
-                    <button
-                      onClick={() => handle('reject')}
-                      disabled={!reviewerNote.trim() || loading !== null}
-                      className="flex-1 py-2 rounded text-sm font-body font-semibold transition-colors disabled:opacity-40"
-                      style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', color: '#f87171' }}
-                    >
-                      {loading === 'reject' ? 'Rejecting…' : '✗ Reject Appeal'}
-                    </button>
+                  <div className="flex gap-2 flex-wrap">
+                    {onApprove && (
+                      <button
+                        onClick={() => handle('approve')}
+                        disabled={!reviewerNote.trim() || loading !== null}
+                        className="flex-1 py-2 rounded text-sm font-body font-semibold transition-colors disabled:opacity-40"
+                        style={{ background: 'rgba(74,222,128,0.15)', border: '1px solid rgba(74,222,128,0.35)', color: '#4ade80' }}
+                      >
+                        {loading === 'approve' ? 'Approving…' : '✓ Approve & Restore Points'}
+                      </button>
+                    )}
+                    {onReject && (
+                      <button
+                        onClick={() => handle('reject')}
+                        disabled={!reviewerNote.trim() || loading !== null}
+                        className="flex-1 py-2 rounded text-sm font-body font-semibold transition-colors disabled:opacity-40"
+                        style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', color: '#f87171' }}
+                      >
+                        {loading === 'reject' ? 'Rejecting…' : '✗ Reject Appeal'}
+                      </button>
+                    )}
+                    {onEscalate && (
+                      <button
+                        onClick={handleEscalate}
+                        disabled={loading !== null}
+                        className="flex-1 py-2 rounded text-sm font-body font-semibold transition-colors disabled:opacity-40"
+                        style={{ background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.3)', color: '#60a5fa' }}
+                      >
+                        {loading === 'escalate' ? 'Escalating…' : '↑ Escalate to Headmistress'}
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
