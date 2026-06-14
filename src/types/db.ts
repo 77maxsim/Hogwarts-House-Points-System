@@ -11,9 +11,13 @@ export type FlagStatus = 'open' | 'reviewed' | 'dismissed'
 export interface HouseStanding {
   house_id: string
   house_name: string
-  house_slug: HouseSlug
+  slug: HouseSlug          // actual DB column
+  house_slug?: HouseSlug   // not present in this view
   house_color?: string
+  primary_color?: string
+  secondary_color?: string
   total_points: number
+  standing_rank?: number   // actual DB column
   rank?: number
 }
 

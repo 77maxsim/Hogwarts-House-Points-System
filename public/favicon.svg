@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Dark shield background -->
+  <path d="M 16 2 L 30 2 L 30 20 Q 30 28 16 31 Q 2 28 2 20 L 2 2 Z" fill="#0A0501"/>
+  <!-- House-neutral dark teal fill (inner) -->
+  <path d="M 16 4 L 28 4 L 28 19 Q 28 26 16 29 Q 4 26 4 19 L 4 4 Z" fill="#0F0A03"/>
+  <!-- Gold H mark — two vertical pillars and crossbar -->
+  <rect x="10" y="9"  width="3" height="13" rx="1" fill="#C9A84C"/>
+  <rect x="19" y="9"  width="3" height="13" rx="1" fill="#C9A84C"/>
+  <rect x="10" y="14" width="12" height="3"  rx="1" fill="#C9A84C"/>
+  <!-- Gold shield border -->
+  <path d="M 16 2 L 30 2 L 30 20 Q 30 28 16 31 Q 2 28 2 20 L 2 2 Z"
+        fill="none" stroke="#C9A84C" stroke-width="1.5"/>
+  <!-- Inner shield border (subtle) -->
+  <path d="M 16 4 L 28 4 L 28 19 Q 28 26 16 29 Q 4 26 4 19 L 4 4 Z"
+        fill="none" stroke="#C9A84C" stroke-width="0.5" opacity="0.40"/>
+</svg>

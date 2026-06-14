@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import DemoSwitcher from '../components/DemoSwitcher'
+import HouseCrest from '../components/HouseCrest'
 import { useDemoIdentity } from '../contexts/DemoIdentity'
 import type { House, RoleLimit, UserRole } from '../types/db'
 import { getHouseTheme } from '../lib/houseTheme'
@@ -520,6 +521,43 @@ export default function PointsEntry() {
                         </select>
                       </div>
                     </div>
+
+                    {/* House identity preview — shown when house is selected */}
+                    <AnimatePresence>
+                      {houseId && houseTheme && selectedHouse && (
+                        <motion.div
+                          key={houseId}
+                          initial={{ opacity: 0, y: -6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -6 }}
+                          transition={{ duration: 0.22 }}
+                          className="mt-3"
+                        >
+                          <div
+                            className="rounded-lg p-3 flex items-center gap-3"
+                            style={{
+                              background: houseTheme.gradient,
+                              border: `1px solid ${houseTheme.border}`,
+                              boxShadow: `0 0 20px ${houseTheme.glow}`,
+                            }}
+                          >
+                            <HouseCrest house={selectedHouse.slug as HouseSlug} size={52} />
+                            <div>
+                              <p className="font-display text-base font-semibold leading-none" style={{ color: houseTheme.text }}>
+                                {selectedHouse.name}
+                              </p>
+                              <p className="text-xs font-mono mt-0.5" style={{ color: houseTheme.textDim }}>
+                                Points will affect this house
+                              </p>
+                              <div
+                                className="mt-1.5 h-0.5 rounded-full w-10"
+                                style={{ background: `linear-gradient(90deg, ${houseTheme.secondary}, transparent)` }}
+                              />
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
 
                   {/* ② Transaction */}
